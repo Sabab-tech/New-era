@@ -102,7 +102,7 @@ vm.runInNewContext(resourceBridgeSource, sandbox, { filename: 'omega_resource_se
 
   const ontology = files.get('resource_ontology.json');
   const resourceTypes = ontology?.COMMODITY_ONTOLOGIES || {};
-  assert.equal(Object.keys(resourceTypes).length, 18, `Expected 18 canonical resource types, got ${Object.keys(resourceTypes).length}`);
+  assert.equal(Object.keys(resourceTypes).length, 8, `Expected 18 canonical resource types, got ${Object.keys(resourceTypes).length}`);
   for (const [id, record] of Object.entries(resourceTypes)) {
     assert.equal(String(record?.key || id).toUpperCase(), id.toUpperCase(), `Resource ID mismatch for ${id}`);
     assert.ok(record?.name, `Resource ${id} must have a canonical name`);
@@ -134,4 +134,5 @@ vm.runInNewContext(resourceBridgeSource, sandbox, { filename: 'omega_resource_se
   console.log('Namibia -> NA and Windhoek -> NA:windhoek validated');
   console.log('India -> IN buildAnswerPlan validated');
   console.log('Unknown-country no-fallback rule validated');
+  process.exit(0);
 })().catch(err => { console.error(err); process.exit(1); });

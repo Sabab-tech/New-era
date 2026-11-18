@@ -22,6 +22,15 @@ const INDEX_PATH = path.join(__dirname, 'index.html');
 const CANDIDATE_MODELS = ['gemini-2.5-flash','gemini-2.0-flash'];
 const AI_INTEGRITY_SCRIPT = '<script src="/omega_ai_integrity_layer.js"></script>';
 const HEALTH_LOGO_SCRIPT = '<script src="/health-ministry-logo.js"></script>';
+const MINISTRY_REGISTRY_SCRIPT = '<script src="/omega_ministry_registry.js"></script>';
+const MINISTRY_STATE_PROVIDER_SCRIPT = '<script src="/omega_ministry_state_provider.js"></script>';
+const MINISTRY_INFORMATION_POLICY_SCRIPT = '<script src="/omega_ministry_information_policy.js"></script>';
+const MINISTRY_DECISION_FRAMEWORK_SCRIPT = '<script src="/omega_ministry_decision_framework.js"></script>';
+const MINISTRY_STATE_TRANSACTION_SCRIPT = '<script src="/omega_ministry_state_transaction.js"></script>';
+const MINISTRY_INTEROPERABILITY_SCRIPT = '<script src="/omega_ministry_interoperability_system.js"></script>';
+const MINISTRY_DOMAIN_ENGINES_SCRIPT = '<script src="/omega_ministry_domain_engines.js"></script>';
+const MINISTRY_RUNTIME_V1_SCRIPT = '<script src="/omega_ministry_runtime_v1.js"></script>';
+const SIMULATION_RUNTIME_SCRIPT = '<script src="/omega_simulation_runtime.js"></script>';
 const MINISTER_CAPABILITY_SCRIPT = '<script src="/minister_capability_engine.js"></script>';
 const MINISTER_STATE_SCRIPT = '<script src="/omega_minister_state_system.js"></script>';
 const MINISTER_RECRUITMENT_SCRIPT = '<script src="/minister_recruitment_engine.js"></script>';
@@ -93,7 +102,7 @@ function ministerCandidates(ministryId, countryCode) {
 }
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 app.use(express.json({ limit: '10mb' }));
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -107,7 +116,15 @@ function renderIndex(res, next) {
   fs.readFile(INDEX_PATH, 'utf8', (err, html) => {
     if (err) return next(err);
     let output = html;
-    const scripts = [LANGUAGE_SYSTEM_SCRIPT, LANGUAGE_BATCH03_SCRIPT, COUNTRY_BRIDGE_SCRIPT, RESOURCE_BRIDGE_SCRIPT, MINISTER_CAPABILITY_SCRIPT, MINISTER_STATE_SCRIPT, MINISTER_RECRUITMENT_SCRIPT, MINISTER_BOOTSTRAP_SCRIPT, MINISTER_RUNTIME_SCRIPT, COGNITIVE_SCRIPT, REASONING_SCRIPT, UNIVERSAL_AI_SCRIPT, AI_INTEGRITY_SCRIPT, HEALTH_LOGO_SCRIPT, UI_INTERACTION_GUARD_SCRIPT];
+    const scripts = [
+      LANGUAGE_SYSTEM_SCRIPT, LANGUAGE_BATCH03_SCRIPT, COUNTRY_BRIDGE_SCRIPT, RESOURCE_BRIDGE_SCRIPT,
+      MINISTRY_REGISTRY_SCRIPT, MINISTRY_STATE_PROVIDER_SCRIPT, MINISTRY_INFORMATION_POLICY_SCRIPT,
+      MINISTRY_DECISION_FRAMEWORK_SCRIPT, MINISTRY_STATE_TRANSACTION_SCRIPT, MINISTRY_DOMAIN_ENGINES_SCRIPT,
+      MINISTRY_INTEROPERABILITY_SCRIPT, MINISTRY_RUNTIME_V1_SCRIPT, SIMULATION_RUNTIME_SCRIPT,
+      MINISTER_CAPABILITY_SCRIPT, MINISTER_STATE_SCRIPT,
+      MINISTER_RECRUITMENT_SCRIPT, MINISTER_BOOTSTRAP_SCRIPT, MINISTER_RUNTIME_SCRIPT, COGNITIVE_SCRIPT,
+      REASONING_SCRIPT, UNIVERSAL_AI_SCRIPT, AI_INTEGRITY_SCRIPT, HEALTH_LOGO_SCRIPT, UI_INTERACTION_GUARD_SCRIPT
+    ];
     for (const script of scripts) { const src = script.match(/src="([^"]+)"/)?.[1]; if (src && !output.includes(src)) output = output.replace('</body>', `    ${script}\n</body>`); }
     res.type('html').send(output);
   });
@@ -129,12 +146,165 @@ app.post('/api/minister-state/diagnostics', (req, res) => { try { const registry
 function deepCoreContext(req) {
   const source = req.method === 'GET' ? req.query : req.body;
   const body = source && typeof source === 'object' ? source : {};
-  return { ...body, countryId: body.countryId || body.countryCode, countryCode: body.countryCode || body.countryId };
+  return {
+    ...body,
+    countryId: body.countryId || body.countryCode,
+    countryCode: body.countryCode || body.countryId,
+    ministerId: body.ministerId || body.ministerID,
+    ministryId: body.ministryId || body.ministryID,
+    ministerName: body.ministerName || body.ministerDisplayName
+  };
 }
-function buildDeepCoreIR(prompt, input = {}) { if (!OfflineSemanticBrain?.parse) throw new Error('OfflineSemanticBrain is unavailable'); return OfflineSemanticBrain.parse(prompt, input); }
+function buildDeepCoreIR(prompt, input = {}) {
+  if (ProductionSemanticRuntime?.parse) {
+    try {
+      const canonical = ProductionSemanticRuntime.parse(prompt, {
+        countryCode: input.countryCode || input.countryId,
+        ministryId: input.ministryId,
+        ministerId: input.ministerId,
+        ministerName: input.ministerName
+      });
+      if (canonical?.targetDomain === 'MINISTER') return canonical;
+    } catch (e) {
+      console.warn('[Deep Core] Production minister semantic parse fallback:', e.message);
+    }
+  }
+  if (!OfflineSemanticBrain?.parse) throw new Error('OfflineSemanticBrain is unavailable');
+  return OfflineSemanticBrain.parse(prompt, input);
+}
+function findMinisterRecordLocation(ministerId) {
+  const id = String(ministerId || '').trim();
+  const db = cachedMinisters?.ministers_database || {};
+  for (const [category, list] of Object.entries(db)) {
+    if (!Array.isArray(list)) continue;
+    const index = list.findIndex(row => String(row?.id || '').trim() === id);
+    if (index >= 0) return { category, index };
+  }
+  return null;
+}
+function executeProductionMinisterQuery(prompt, input, ir) {
+  if (!ProductionSemanticRuntime?.buildAnswerPlan || ir?.targetDomain !== 'MINISTER') return null;
+  const identity = {
+    countryCode: input.countryCode || input.countryId,
+    ministryId: input.ministryId,
+    ministerId: input.ministerId,
+    ministerName: input.ministerName
+  };
+  let plan;
+  try {
+    plan = ProductionSemanticRuntime.buildAnswerPlan(
+      prompt,
+      identity,
+      input.gameState || input.worldState || {},
+      Array.isArray(input.history) ? input.history : []
+    );
+  } catch (e) {
+    return {
+      handled: true,
+      result: {
+        ok: false,
+        status: 'MINISTER_RUNTIME_EXECUTION_ERROR',
+        value: null,
+        evidence: [],
+        trace: [{ step: 'MINISTER_RUNTIME', status: 'EXECUTION_ERROR', error: e.message }]
+      }
+    };
+  }
+  const semantic = plan?.semantic || ir;
+  if (semantic?.targetDomain !== 'MINISTER') return null;
+  const base = plan?.result || {};
+  const ministerId = semantic?.entities?.minister?.id || input.ministerId || null;
+  if (!base?.ok) {
+    return {
+      handled: true,
+      result: {
+        ok: false,
+        status: base.reason || 'MINISTER_QUERY_UNRESOLVED',
+        value: base.value ?? null,
+        evidence: [],
+        trace: [
+          { step: 'QUESTION_INTERPRETATION', operation: semantic?.operation || null },
+          { step: 'MINISTER_IDENTITY_RESOLUTION', status: 'UNRESOLVED', ministerId: ministerId || null }
+        ],
+        dataAccess: { repositoryIndexed: true, authority: 'NODE_FILESYSTEM' }
+      }
+    };
+  }
+  const attribute = semantic?.attribute?.name || base?.attribute || null;
+  const location = findMinisterRecordLocation(ministerId);
+  const recordLocator = location
+    ? `ministers_database.${location.category}[${location.index}]`
+    : 'ministers_database';
+  const fieldPath = attribute && location
+    ? `ministers_database.${location.category}[${location.index}].${attribute}`
+    : attribute || null;
+  const evidence = [{
+    dataset: 'ministers.json',
+    physicalPath: 'ministers.json',
+    logicalDatasetId: 'ministers.json',
+    recordLocator,
+    fieldPath,
+    canonicalEntityId: ministerId,
+    entityType: 'MINISTER',
+    property: attribute,
+    rawValue: base.value,
+    operation: String(semantic?.operation || base?.operation || 'ATTRIBUTE').toUpperCase(),
+    relationPath: [],
+    authority: 'NODE_FILESYSTEM',
+    source: 'DEEP_CORE_PRODUCTION_MINISTER_EXECUTOR'
+  }];
+  return {
+    handled: true,
+    result: {
+      ok: true,
+      status: 'VERIFIED_FACT',
+      operation: base.operation || semantic.operation || 'ATTRIBUTE',
+      attribute,
+      value: base.value,
+      source: base.source || 'ministers.json',
+      evidence,
+      trace: [
+        { step: 'QUESTION_INTERPRETATION', operation: semantic.operation || null, attribute },
+        { step: 'MINISTER_IDENTITY_RESOLUTION', ministerId, status: 'RESOLVED', authority: 'OMEGA_PRODUCTION_SEMANTIC_RUNTIME' },
+        { step: 'RAW_RECORD_RESOLUTION', dataset: 'ministers.json', recordLocator },
+        { step: 'ATTRIBUTE_EXTRACTION', property: attribute },
+        { step: 'EVIDENCE_VALIDATION', status: 'VERIFIED_FACT' }
+      ],
+      dataAccess: { repositoryIndexed: true, authority: 'NODE_FILESYSTEM', dataset: 'ministers.json' }
+    }
+  };
+}
 function executeDeepCorePrompt(prompt, input = {}) {
   const ir = buildDeepCoreIR(prompt, input);
-  const runtimeDataContext = { ...input, ir, countryId: input.countryId || input.countryCode, countryCode: input.countryCode || input.countryId };
+  const runtimeDataContext = {
+    ...input,
+    ir,
+    countryId: input.countryId || input.countryCode,
+    countryCode: input.countryCode || input.countryId,
+    ministerId: input.ministerId,
+    ministryId: input.ministryId
+  };
+  const ministerExecution = executeProductionMinisterQuery(prompt, runtimeDataContext, ir);
+  if (ministerExecution?.handled) {
+    const result = ministerExecution.result;
+    const evidenceLedger = OfflineQueryEngine?.buildEvidenceLedger ? OfflineQueryEngine.buildEvidenceLedger(result) : null;
+    return {
+      prompt,
+      ir,
+      searchStrategy: ir.searchStrategy || null,
+      executionPlan: {
+        version: OfflineQueryEngine?.VERSION || null,
+        authority: 'NODE_FILESYSTEM',
+        route: 'PRODUCTION_SEMANTIC_RUNTIME -> MINISTER_ATTRIBUTE_EXECUTOR',
+        runtimeContextKeys: Object.keys(runtimeDataContext),
+        identity: { ministerId: ir?.entities?.minister?.id || input.ministerId || null },
+        operation: ir?.operation || null
+      },
+      result,
+      evidenceLedger,
+      diagnostics: OfflineQueryEngine?.diagnostics ? OfflineQueryEngine.diagnostics() : null
+    };
+  }
   const executionPlan = OfflineQueryEngine?.buildExecutionPlan ? OfflineQueryEngine.buildExecutionPlan(ir, runtimeDataContext) : null;
   const result = OfflineQueryEngine?.execute ? OfflineQueryEngine.execute(ir, runtimeDataContext, ir.language || input.language || 'en', input) : { ok: false, status: 'DEEP_CORE_UNAVAILABLE', value: null, evidence: [] };
   const evidenceLedger = OfflineQueryEngine?.buildEvidenceLedger ? OfflineQueryEngine.buildEvidenceLedger(result) : null;
@@ -171,4 +341,4 @@ function canonicalPlan(prompt, input = {}) {
 function runCognitiveBridge(prompt, semantic, offlineResult, identity, language, gameState, conversationHistory) { if (!OmegaReasoningDispatcher?.dispatch) return { available: false, reason: 'COGNITIVE_DISPATCHER_UNAVAILABLE' }; try { const parsed = semantic || { operation: 'LOOKUP', language: language || 'en', surface: prompt }; const history = Array.isArray(conversationHistory) ? conversationHistory : []; return OmegaReasoningDispatcher.dispatch(prompt, parsed, offlineResult || {}, { ...identity, language, gameState: gameState || {}, history, timeHorizon: 'CURRENT' }); } catch (e) { return { available: false, reason: 'COGNITIVE_DISPATCH_ERROR', error: e.message }; } }
 app.get('/api/deep-core/health', (req, res) => { try { const diagnostics = OfflineQueryEngine.diagnostics(); res.json({ ok: diagnostics.initialized === true, engine: 'OMEGA_DEEP_CORE', version: OfflineQueryEngine.VERSION, diagnostics }); } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
 
-app.listen(PORT, '0.0.0.0', () => { console.log(`[OMEGA Server] Listening on port ${PORT}`); try { console.log('[Deep Core Diagnostics]', JSON.stringify(OfflineQueryEngine.diagnostics())); } catch (e) { console.warn('[Deep Core Diagnostics] unavailable:', e.message); } });
+app.listen(PORT, () => { console.log(`[OMEGA Server] Listening on port ${PORT}`); try { console.log('[Deep Core Diagnostics]', JSON.stringify(OfflineQueryEngine.diagnostics())); } catch (e) { console.warn('[Deep Core Diagnostics] unavailable:', e.message); } });

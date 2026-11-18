@@ -24,3 +24,55 @@
   function boot(){ensureGlobalRegistryAlias();patchUI();interceptInterrogation();let tries=0;const timer=setInterval(()=>{tries++;ensureGlobalRegistryAlias();patchUI();const m=ministry();if(m)install(m);if(tries>100)clearInterval(timer)},100)}
   global.OmegaLiveMinisterSelectorV9={VERSION:'9.1.1',install,appoint,active,candidates};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })(typeof window!=='undefined'?window:globalThis);
+
+/* ============================================================================
+ * OMEGA 17-MINISTRY LIVE ACTIVATION BRIDGE v2.0.0
+ * Compatibility shim for the canonical 17-ministry runtime controller.
+ * Scheduling is owned by index.html's single engine loop. This file does not
+ * create a second timer and therefore cannot double-tick ministries.
+ * ============================================================================ */
+(function(global){'use strict';
+  const runtime=global.OMEGA_MINISTRY_RUNTIME_V1||global.Omega?.MinistryRuntime;
+  function sync(){
+    if(!runtime || typeof runtime.init!=='function') return false;
+    const kernel=global.Omega?.Kernel;
+    if(!kernel) return false;
+    if(!runtime.init(kernel)) return false;
+
+    const ids=runtime.getIds();
+    const manifest=global.GLOBAL_MINISTRY_MANIFEST;
+    if(Array.isArray(manifest)){
+      manifest.forEach(item=>{
+        if(item && ids.includes(String(item.id))) item.status='ACTIVE';
+      });
+    }
+
+    global.Omega=global.Omega||{};
+    global.Omega.App=global.Omega.App||{};
+    global.Omega.App.MINISTRIES=Object.freeze(ids.slice());
+    global.Omega.App.activeMinistries=Object.freeze(ids.slice());
+
+    global.__OMEGA_MINISTRY_RUNTIME_STATUS__=global.__OMEGA_MINISTRY_RUNTIME_STATUS__||{};
+    global.__OMEGA_17_MINISTRY_ACTIVATION__={
+      version:'2.0.0',
+      controllerVersion:runtime.version,
+      ids:ids.slice(),
+      scheduler:'OMEGA_ENGINE_LOOP',
+      startedAt:global.__OMEGA_17_MINISTRY_ACTIVATION__?.startedAt||Date.now()
+    };
+
+    try{
+      global.dispatchEvent?.(new CustomEvent('OMEGA_ALL_17_MINISTRIES_LIVE',{
+        detail:{count:ids.length,ids:ids.slice(),scheduler:'OMEGA_ENGINE_LOOP'}
+      }));
+    }catch(_){}
+    console.info('[OMEGA 17M] ALL 17 MINISTRIES LIVE VIA CANONICAL RUNTIME',ids);
+    return true;
+  }
+  function start(){
+    if(sync()) return;
+    setTimeout(start,250);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start,{once:true});
+  else start();
+})(typeof window!=='undefined'?window:globalThis);
